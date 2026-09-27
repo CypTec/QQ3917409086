@@ -1,5 +1,5 @@
 -- ============================================================
--- 第一部分：加载动画 (无色液态玻璃 + 大雪 + 动态模糊)
+-- 加载界面（无色液态玻璃 + 淡蓝点缀 + 大雪 + 动态模糊）
 -- ============================================================
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -59,7 +59,6 @@ local snowConn = RunService.RenderStepped:Connect(function(dt)
     end
 end)
 
--- 玻璃面板外发光
 local GlowLayerInner = Instance.new("Frame")
 GlowLayerInner.Size = UDim2.new(0, 456, 0, 336)
 GlowLayerInner.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -103,7 +102,6 @@ task.spawn(function()
     end
 end)
 
--- 玻璃面板本体
 local GlassPanel = Instance.new("Frame")
 GlassPanel.Size = UDim2.new(0, 440, 0, 320)
 GlassPanel.Position = UDim2.new(0.5, 0, 0.5, 20)
@@ -191,226 +189,23 @@ BarFill.ClipsDescendants = true
 
 task.wait(3)
 
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
 if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
 TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
 local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
+    {GlassPanel, "BackgroundTransparency"}, {Splash, "ImageTransparency"}, {Title, "TextTransparency"},
+    {StatusBox, "BackgroundTransparency"}, {StatusText, "TextTransparency"}, {BarBg, "BackgroundTransparency"},
+    {BarFill, "BackgroundTransparency"}, {GlowInnerStroke, "Transparency"}, {GlowOuterStroke, "Transparency"}
 }
 for _, item in ipairs(fadeOutList) do
     local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
+    if obj and obj.Parent then TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play() end
 end
-
 task.wait(0.6)
 if BlurEffect then BlurEffect:Destroy() end
 LoadingGui:Destroy()
 
 -- ============================================================
-
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
-if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
-TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
-local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
-}
-for _, item in ipairs(fadeOutList) do
-    local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
-end
-
-task.wait(0.6)
-if BlurEffect then BlurEffect:Destroy() end
-LoadingGui:Destroy()
--- ============================================================
-
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
-if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
-TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
-local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
-}
-for _, item in ipairs(fadeOutList) do
-    local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
-end
-
-task.wait(0.6)
-if BlurEffect then BlurEffect:Destroy() end
-LoadingGui:Destroy()
--- ============================================================
-
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
-if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
-TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
-local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
-}
-for _, item in ipairs(fadeOutList) do
-    local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
-end
-
-task.wait(0.6)
-if BlurEffect then BlurEffect:Destroy() end
-LoadingGui:Destroy()
--- ============================================================
-
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
-if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
-TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
-local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
-}
-for _, item in ipairs(fadeOutList) do
-    local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
-end
-
-task.wait(0.6)
-if BlurEffect then BlurEffect:Destroy() end
-LoadingGui:Destroy()
--- ============================================================
-
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
-if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
-TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
-local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
-}
-for _, item in ipairs(fadeOutList) do
-    local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
-end
-
-task.wait(0.6)
-if BlurEffect then BlurEffect:Destroy() end
-LoadingGui:Destroy()
--- ============================================================
-
--- ================= 加载完成，开始淡出清理 =================
--- 停止雪花更新
-if snowConn then snowConn:Disconnect() end
-
--- 淡出模糊效果
-TweenService:Create(BlurEffect, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { Size = 0 }):Play()
-
--- 淡出加载界面的所有组件
-local fadeOutList = {
-    {GlassPanel, "BackgroundTransparency"},
-    {Splash, "ImageTransparency"},
-    {Title, "TextTransparency"},
-    {StatusBox, "BackgroundTransparency"},
-    {StatusText, "TextTransparency"},
-    {BarBg, "BackgroundTransparency"},
-    {BarFill, "BackgroundTransparency"},
-    {GlowInnerStroke, "Transparency"},
-    {GlowOuterStroke, "Transparency"}
-}
-for _, item in ipairs(fadeOutList) do
-    local obj, prop = item[1], item[2]
-    if obj and obj.Parent then
-        TweenService:Create(obj, TweenInfo.new(0.6), { [prop] = 1 }):Play()
-    end
-end
-
-task.wait(0.6)
-if BlurEffect then BlurEffect:Destroy() end
-LoadingGui:Destroy()
--- ============================================================
-
--- ============================================================
--- 第二部分：加载 WindUI (绿色流光UI)
+-- 加载 WindUI (绿色流光UI)
 -- ============================================================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 WindUI.TransparencyValue = 0.2
@@ -429,7 +224,7 @@ WindUI:SetTheme("GreenHairTheme")
 
 local Window = WindUI:CreateWindow({
     Title = "龙卷",
-    Icon = "rbxassetid://136469174415866",
+    Icon = "rbxassetid://75100441864312",
     Author = "作者 CypTec",
     Folder = "LongJuan",
     Size = UDim2.fromOffset(620, 460),
@@ -440,7 +235,6 @@ local Window = WindUI:CreateWindow({
     User = { Enabled = true, Anonymous = false },
 })
 
--- 动态绿色流光边框
 local borderAnimation
 local animationSpeed = 3
 local function createGradientBorder(window)
@@ -480,7 +274,6 @@ end
 local gradientStroke = createGradientBorder(Window)
 if gradientStroke then borderAnimation = startBorderAnimation(Window, animationSpeed) end
 
--- 悬浮按钮 (绿色流光 + 你的图片)
 Window:EditOpenButton({
     Title = "", Icon = "rbxassetid://90581686679780", CornerRadius = UDim.new(0, 16), StrokeThickness = 2,
     Color = ColorSequence.new(Color3.fromHex("3A6B4D"), Color3.fromHex("A3D9B6")), Draggable = true,
@@ -502,7 +295,6 @@ task.spawn(function()
     end
 end)
 
--- 强制替换图片
 task.spawn(function()
     task.wait(2)
     for _, gui in pairs(game:GetService("CoreGui"):GetChildren()) do
@@ -518,12 +310,10 @@ task.spawn(function()
     end
 end)
 
--- 顶部按钮
 Window:CreateTopbarButton("theme-switcher", "moon", function()
     WindUI:SetTheme(WindUI:GetCurrentTheme() == "Dark" and "Light" or "Dark")
 end, 990)
 
--- 关闭按钮绿色化
 task.spawn(function()
     task.wait(2)
     local CoreGui = game:GetService("CoreGui")
