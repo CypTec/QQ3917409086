@@ -109,6 +109,812 @@ local CopyItems = {
     { Title = "复制脚本链接", Icon = "link",  Text = "https://example.com" },
 }
 -- ============================================================
+-- 自由视角
+-- ============================================================
+local function InitFreecamInput()
+    if Freecam._InputInited then return end
+    Freecam._InputInited = true
+    table.insert(Freecam.Connections, UIS.TouchStarted:Connect(function(t)
+        if not Freecam.Enabled then return end
+        if t.Position.X < Camera.ViewportSize.X / 2 then
+            if not Freecam.Touch.Move then Freecam.Touch.Move = t Freecam.Touch.MoveStart = t.Position Freecam.MoveInput = Vector2.zero end
+        else
+            if not Freecam.Touch.Look then Freecam.Touch.Look = t end
+        end
+    end))
+    table.insert(Freecam.Connections, UIS.TouchMoved:Connect(function(t)
+        if not Freecam.Enabled then return end
+        if t == Freecam.Touch.Move and Freecam.Touch.MoveStart then
+            local d = t.Position - Freecam.Touch.MoveStart
+            Freecam.MoveInput = Vector2.new(math.clamp(d.X/80,-1,1), math.clamp(-d.Y/80,-1,1))
+        elseif t == Freecam.Touch.Look then
+            local dd = t.Delta
+            Freecam.Yaw -= dd.X * Freecam.Sensitivity
+            Freecam.Pitch = math.clamp(Freecam.Pitch - dd.Y * Freecam.Sensitivity, math.rad(-85), math.rad(85))
+        end
+    end))
+    table.insert(Freecam.Connections, UIS.TouchEnded:Connect(function(t)
+        if t == Freecam.Touch.Move then Freecam.Touch.Move = nil Freecam.Touch.MoveStart = nil Freecam.MoveInput = Vector2.zero end
+        if t == Freecam.Touch.Look then Freecam.Touch.Look = nil end
+    end))
+end
+
+local function StartFreecam()
+    if Freecam.Enabled then return end
+    Freecam.Enabled = true
+    InitFreecamInput()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return end
+    if not Freecam.Rig then
+        Freecam.Rig = Instance.new("Part")
+        Freecam.Rig.Anchored = true
+        Freecam.Rig.CanCollide = false
+        Freecam.Rig.Transparency = 1
+        Freecam.Rig.Size = Vector3.new(1,1,1)
+        Freecam.Rig.Parent = workspace
+    end
+    Freecam.Rig.CFrame = Camera.CFrame
+    root.Anchored = true
+    hum.AutoRotate = false
+    hum.PlatformStand = true
+    Camera.CameraType = Enum.CameraType.Scriptable
+    local x, y = Camera.CFrame:ToEulerAnglesYXZ()
+    Freecam.Yaw = y
+    Freecam.Pitch = x
+    Freecam.Loop = RunService.RenderStepped:Connect(function()
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if r then r.AssemblyLinearVelocity = Vector3.zero r.AssemblyAngularVelocity = Vector3.zero end
+        local rotCF = CFrame.Angles(0, Freecam.Yaw, 0) * CFrame.Angles(Freecam.Pitch, 0, 0)
+        local cf = CFrame.new(Freecam.Rig.Position) * rotCF
+        local move = (cf.RightVector * Freecam.MoveInput.X) + (cf.LookVector * Freecam.MoveInput.Y)
+        Freecam.Rig.CFrame = CFrame.new(Freecam.Rig.Position + move * Freecam.Speed) * rotCF
+        Camera.CFrame = Freecam.Rig.CFrame
+    end)
+end
+
+local function StopFreecam()
+    if not Freecam.Enabled then return end
+    Freecam.Enabled = false
+    if Freecam.Loop then Freecam.Loop:Disconnect() Freecam.Loop = nil end
+    for _, c in pairs(Freecam.Connections) do pcall(function() c:Disconnect() end) end
+    Freecam.Connections = {}
+    Freecam._InputInited = false
+    Freecam.MoveInput = Vector2.zero
+    Freecam.Touch.Move = nil
+    Freecam.Touch.Look = nil
+    local char = LocalPlayer.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if root then root.Anchored = false end
+        if hum then hum.AutoRotate = true hum.PlatformStand = false end
+    end
+    Camera.CameraType = Enum.CameraType.Custom
+end
+
+-- ============================================================
+-- 闪电尖兵
+-- ============================================================
+local TP_Module = {}
+local TP_Loaded = false
+
+function EnableTPUI()
+    if TP_Loaded then
+        if TP_Module.Gui then TP_Module.Gui.Enabled = true end
+        return
+    end
+    TP_Loaded = true
+    local LP = LocalPlayer
+    local Mode = false
+    local Root, Hum
+    local OldCF, OldType, FixedY = nil, nil, 0
+    local MoveInput = Vector2.zero
+    local TouchMove, TouchStart
+    local SpeedTP = 3
+    local HeightSpeed = 4
+    local Gui = Instance.new("ScreenGui")
+    Gui.Parent = game:GetService("CoreGui")
+    Gui.IgnoreGuiInset = true
+    Gui.Enabled = true
+    TP_Module.Gui = Gui
+    local Btn = Instance.new("TextButton", Gui)
+    Btn.Size = UDim2.new(0,80,0,40) Btn.Position = UDim2.new(1,-90,0.35,0) Btn.Text = "瞬移" Btn.BackgroundColor3 = Color3.fromRGB(40,40,40) Btn.TextColor3 = Color3.new(1,1,1)
+    local Cross = Instance.new("Frame", Gui)
+    Cross.Size = UDim2.new(0,8,0,8) Cross.AnchorPoint = Vector2.new(0.5,0.5) Cross.Position = UDim2.new(0.5,0,0.5,0) Cross.BackgroundColor3 = Color3.fromRGB(255,0,0) Cross.Visible = false
+    Instance.new("UICorner", Cross).CornerRadius = UDim.new(1,0)
+    local UpBtn = Instance.new("TextButton", Gui)
+    UpBtn.Size = UDim2.new(0,60,0,60) UpBtn.Position = UDim2.new(1,-80,0.7,-70) UpBtn.Text = "↑" UpBtn.BackgroundColor3 = Color3.fromRGB(60,60,60) UpBtn.Visible = false
+    local DownBtn = Instance.new("TextButton", Gui)
+    DownBtn.Size = UDim2.new(0,60,0,60) DownBtn.Position = UDim2.new(1,-80,0.7,10) DownBtn.Text = "↓" DownBtn.BackgroundColor3 = Color3.fromRGB(60,60,60) DownBtn.Visible = false
+    local function LockChar()
+        local char = LP.Character if not char then return end
+        Root = char:FindFirstChild("HumanoidRootPart") Hum = char:FindFirstChildOfClass("Humanoid")
+        if Root then Root.Anchored = true end
+        if Hum then Hum.AutoRotate = false Hum.PlatformStand = true end
+    end
+    local function UnlockChar()
+        if Root then Root.Anchored = false end
+        if Hum then Hum.AutoRotate = true Hum.PlatformStand = false end
+    end
+    local function Enter()
+        local char = LP.Character local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        OldCF = Camera.CFrame OldType = Camera.CameraType
+        Camera.CameraType = Enum.CameraType.Scriptable
+        FixedY = root.Position.Y + 150
+        Camera.CFrame = CFrame.new(root.Position + Vector3.new(0,150,0)) * CFrame.Angles(math.rad(-90), 0, 0)
+        LockChar() Cross.Visible = true UpBtn.Visible = true DownBtn.Visible = true
+    end
+    local function Exit()
+        local char = LP.Character
+        if char then Root = char:FindFirstChild("HumanoidRootPart") Hum = char:FindFirstChildOfClass("Humanoid") end
+        UnlockChar()
+        if Hum then pcall(function() Hum.PlatformStand = false Hum.AutoRotate = true Hum:ChangeState(Enum.HumanoidStateType.GettingUp) Hum:ChangeState(Enum.HumanoidStateType.Running) end) end
+        if Root and Root.Parent then Root.Anchored = false end
+        Camera.CameraType = OldType or Enum.CameraType.Custom
+        if OldCF then Camera.CFrame = OldCF end
+        Cross.Visible = false UpBtn.Visible = false DownBtn.Visible = false
+    end
+    RunService.RenderStepped:Connect(function()
+        if not Mode then return end
+        local move = Vector3.new(MoveInput.X, 0, MoveInput.Y) * SpeedTP
+        local pos = Camera.CFrame.Position + move
+        Camera.CFrame = CFrame.new(Vector3.new(pos.X, FixedY, pos.Z)) * CFrame.Angles(math.rad(-90), 0, 0)
+    end)
+    local UpHolding, DownHolding = false, false
+    UpBtn.MouseButton1Down:Connect(function() UpHolding = true end)
+    UpBtn.MouseButton1Up:Connect(function() UpHolding = false end)
+    DownBtn.MouseButton1Down:Connect(function() DownHolding = true end)
+    DownBtn.MouseButton1Up:Connect(function() DownHolding = false end)
+    RunService.RenderStepped:Connect(function()
+        if not Mode then return end
+        if UpHolding then FixedY += HeightSpeed end
+        if DownHolding then FixedY -= HeightSpeed end
+    end)
+    UIS.TouchStarted:Connect(function(t) if not Mode then return end if t.Position.X < Camera.ViewportSize.X/2 then TouchMove = t TouchStart = t.Position end end)
+    UIS.TouchMoved:Connect(function(t) if t ~= TouchMove then return end local d = t.Position - TouchStart MoveInput = Vector2.new(math.clamp(d.X/50, -1, 1), math.clamp(d.Y/50, -1, 1)) end)
+    UIS.TouchEnded:Connect(function(t) if t == TouchMove then TouchMove = nil MoveInput = Vector2.zero end end)
+    local function GetCenterRay()
+        local ap = Cross.AbsolutePosition local as_ = Cross.AbsoluteSize
+        local ray = Camera:ViewportPointToRay(ap.X + as_.X/2, ap.Y + as_.Y/2)
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = {LP.Character}
+        local result = Workspace:Raycast(ray.Origin, Vector3.new(0,-5000,0), params)
+        return result and result.Position or ray.Origin
+    end
+    local function TP()
+        if not Root then return end
+        local pos = GetCenterRay()
+        Root.Anchored = false
+        Root.CFrame = CFrame.new(pos + Vector3.new(0,3,0))
+    end
+    Btn.MouseButton1Click:Connect(function()
+        if not Mode then Mode = true Btn.Text = "确认地点" Btn.BackgroundColor3 = Color3.fromRGB(200,0,0) Enter()
+        else Mode = false Btn.Text = "瞬移" Btn.BackgroundColor3 = Color3.fromRGB(40,40,40) TP() Exit() end
+    end)
+end
+
+function DisableTPUI()
+    if TP_Module.Gui then TP_Module.Gui.Enabled = false end
+end
+-- ============================================================
+-- 防摔 1 & 2
+-- ============================================================
+local AntiFallConnection = nil
+local function StartAntiFall(character)
+    local root = character:WaitForChild("HumanoidRootPart", 10)
+    if not root then return end
+    if AntiFallConnection then AntiFallConnection:Disconnect() end
+    AntiFallConnection = RunService.Heartbeat:Connect(function()
+        if not AntiFallEnabled then return end
+        if not character.Parent or not root or not root.Parent then return end
+        local v = root.AssemblyLinearVelocity
+        root.AssemblyLinearVelocity = Vector3.zero
+        RunService.RenderStepped:Wait()
+        root.AssemblyLinearVelocity = v
+    end)
+end
+
+local function ToggleAntiFall(state)
+    AntiFallEnabled = state
+    if state then
+        local char = LocalPlayer.Character
+        if char then
+            char:WaitForChild("HumanoidRootPart")
+            StartAntiFall(char)
+        end
+        Notify("防摔落伤害", "已开启", 1)
+    else
+        if AntiFallConnection then AntiFallConnection:Disconnect() AntiFallConnection = nil end
+        Notify("防摔落伤害", "已关闭", 1)
+    end
+end
+
+local AntiFall2Connection = nil
+local function StartAntiFall2(character)
+    if AntiFall2Connection then AntiFall2Connection:Disconnect() end
+    local root = character:WaitForChild("HumanoidRootPart")
+    local lastY = root.Position.Y
+    AntiFall2Connection = RunService.Heartbeat:Connect(function()
+        if not AntiFall2Enabled then return end
+        if not character.Parent then return end
+        local cur = root.Position
+        local fall = lastY - cur.Y
+        if fall >= 14 then
+            local vel = root.AssemblyLinearVelocity
+            root.CFrame = root.CFrame * CFrame.new(0, -0.5, 0)
+            root.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z)
+            lastY = root.Position.Y
+        end
+        if cur.Y > lastY then lastY = cur.Y end
+    end)
+end
+
+-- ============================================================
+-- 传送与观战
+-- ============================================================
+local function TeleportToPlayer(target)
+    if not target then return end
+    local char = LocalPlayer.Character
+    local tChar = target.Character
+    if not char or not tChar then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local tRoot = tChar:FindFirstChild("HumanoidRootPart")
+    if root and tRoot then
+        root.CFrame = tRoot.CFrame * CFrame.new(0, 4, 0)
+    end
+end
+
+local function SpectatePlayer(target)
+    if not target then return end
+    local char = target.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    Camera.CameraSubject = hum
+    Camera.CameraType = Enum.CameraType.Custom
+end
+
+local function StopSpectate()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then Camera.CameraSubject = hum end
+end
+-- ============================================================
+-- 甩飞核心
+-- ============================================================
+local function SkidFling(TargetPlayer)
+    if not TargetPlayer or TargetPlayer == LocalPlayer then return end
+    if Flinging then return end
+    Flinging = true
+    local Player = LocalPlayer
+    local Character = Player.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+    local TCharacter = TargetPlayer.Character
+    if not (Character and Humanoid and RootPart and TCharacter) then Flinging = false return end
+    local THumanoid = TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart
+    local THead = TCharacter:FindFirstChild("Head")
+    local Dead = false
+    local DeadConn
+    DeadConn = Player.CharacterAdded:Connect(function() Dead = true if DeadConn then DeadConn:Disconnect() DeadConn = nil end end)
+    if RootPart and RootPart.Parent and RootPart.Velocity.Magnitude < 50 then getgenv().OldPos = RootPart.CFrame end
+    if THead then Camera.CameraSubject = THead elseif THumanoid then Camera.CameraSubject = THumanoid end
+    local function FPos(BasePart, Pos, Ang)
+        if Dead then return end
+        local curChar = Player.Character
+        local curHum = curChar and curChar:FindFirstChildOfClass("Humanoid")
+        local curRoot = curHum and curHum.RootPart
+        if not curChar or not curHum or not curRoot or not curRoot.Parent then return end
+        if not BasePart or not BasePart.Parent then return end
+        local tCF = CFrame.new(BasePart.Position) * Pos * Ang
+        pcall(function()
+            curRoot.CFrame = tCF
+            curChar:SetPrimaryPartCFrame(tCF)
+            curRoot.Velocity = Vector3.new(9e7, 9e7*10, 9e7)
+            curRoot.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+        end)
+    end
+    local function SFBasePart(BasePart)
+        local TimeToWait = 2
+        local Time = tick()
+        local Angle = 0
+        repeat
+            if Dead then break end
+            if not BasePart or not BasePart.Parent then break end
+            local curChar = Player.Character
+            local curHum = curChar and curChar:FindFirstChildOfClass("Humanoid")
+            local curRoot = curHum and curHum.RootPart
+            if not curChar or not curHum or not curRoot then break end
+            if not TRootPart or not TRootPart.Parent then break end
+            if not THumanoid or THumanoid.Health <= 0 then break end
+            if BasePart.Velocity.Magnitude > 1 then
+                Angle = Angle + 100
+                FPos(BasePart, CFrame.new(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0)) task.wait()
+                FPos(BasePart, CFrame.new(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0)) task.wait()
+                FPos(BasePart, CFrame.new(2.25,1.5,-2.25) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0)) task.wait()
+                FPos(BasePart, CFrame.new(-2.25,-1.5,2.25) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0)) task.wait()
+            else
+                FPos(BasePart, CFrame.new(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0)) task.wait()
+                FPos(BasePart, CFrame.new(0,-1.5,-THumanoid.WalkSpeed), CFrame.Angles(0,0,0)) task.wait()
+                FPos(BasePart, CFrame.new(0,1.5,TRootPart.Velocity.Magnitude/1.25), CFrame.Angles(math.rad(90),0,0)) task.wait()
+                FPos(BasePart, CFrame.new(0,-1.5,-TRootPart.Velocity.Magnitude/1.25), CFrame.Angles(0,0,0)) task.wait()
+            end
+        until BasePart.Velocity.Magnitude > 500 or not BasePart.Parent or Dead or tick() > Time + TimeToWait
+    end
+    local BV
+    if not Dead and RootPart and RootPart.Parent then
+        pcall(function()
+            BV = Instance.new("BodyVelocity")
+            BV.Parent = RootPart
+            BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+            BV.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+        end)
+    end
+    pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
+    if not Dead then
+        if TRootPart and TRootPart.Parent then SFBasePart(TRootPart)
+        elseif THead and THead.Parent then SFBasePart(THead) end
+    end
+    if BV then pcall(function() BV:Destroy() end) BV = nil end
+    if DeadConn then DeadConn:Disconnect() DeadConn = nil end
+    Flinging = false
+end
+
+local function StartFlingLoop()
+    if FlingLoop then return end
+    FlingLoop = true
+    AlreadyNotified = {}
+    task.spawn(function()
+        while FlingLoop do
+            local selfChar = LocalPlayer.Character
+            local selfHum = selfChar and selfChar:FindFirstChildOfClass("Humanoid")
+            if not selfChar or not selfHum or selfHum.Health <= 0 then task.wait(0.5) continue end
+            if TP_SelectedPlayer == "ALL" then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if not FlingLoop then break end
+                    local c = LocalPlayer.Character
+                    local h = c and c:FindFirstChildOfClass("Humanoid")
+                    if not c or not h or h.Health <= 0 then break end
+                    if p ~= LocalPlayer then
+                        local pHum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+                        if pHum and pHum.Health > 0 then
+                            SkidFling(p)
+                            local t = tick()
+                            repeat task.wait() until not Flinging or tick()-t > 3
+                            task.wait(0.1)
+                        end
+                    end
+                end
+            else
+                local target = TP_SelectedPlayer or SelectedTarget
+                if target then
+                    SkidFling(target)
+                    local t = tick()
+                    repeat task.wait() until not Flinging or tick()-t > 3
+                end
+            end
+            task.wait(0.2)
+        end
+    end)
+end
+
+local function StopFlingLoop() FlingLoop = false end
+-- ============================================================
+-- 强制第三人称
+-- ============================================================
+local function ApplyUnlock()
+    pcall(function()
+        if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then LocalPlayer.CameraMode = Enum.CameraMode.Classic end
+        LocalPlayer.CameraMinZoomDistance = 0.5
+        LocalPlayer.CameraMaxZoomDistance = 50
+    end)
+end
+local function EnableUnlock()
+    if ThirdPersonUnlock.Connection then return end
+    ThirdPersonUnlock.Enabled = true
+    ApplyUnlock()
+    ThirdPersonUnlock.Connection = RunService.RenderStepped:Connect(function()
+        if not ThirdPersonUnlock.Enabled then return end
+        ApplyUnlock()
+    end)
+end
+local function DisableUnlock()
+    ThirdPersonUnlock.Enabled = false
+    if ThirdPersonUnlock.Connection then ThirdPersonUnlock.Connection:Disconnect() ThirdPersonUnlock.Connection = nil end
+end
+LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5) if ThirdPersonUnlock.Enabled then ApplyUnlock() end end)
+
+-- ============================================================
+-- 普京比例
+-- ============================================================
+local function ApplyPutinRatio(ratio)
+    if PutinConn then PutinConn:Disconnect() PutinConn = nil end
+    getgenv().TXH_Resolution = ratio
+    PutinConn = RunService.RenderStepped:Connect(function()
+        Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, getgenv().TXH_Resolution, 0, 0, 0, 1)
+    end)
+    PutinActive = true
+end
+local function RestoreRatio()
+    if PutinConn then PutinConn:Disconnect() PutinConn = nil end
+    getgenv().TXH_Resolution = 1
+    PutinConn = RunService.RenderStepped:Connect(function()
+        Camera.CFrame = Camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+    end)
+    PutinActive = true
+end
+
+-- ============================================================
+-- 旋转恶搞
+-- ============================================================
+local function TXH_Spin(spinSpeed)
+    local c = LocalPlayer.Character
+    if not c then Notify("错误", "无角色", 2) return end
+    local hum = c:FindFirstChildOfClass("Humanoid") if not hum then Notify("错误", "无Humanoid", 2) return end
+    local hrp = c:FindFirstChild("HumanoidRootPart") if not hrp then Notify("错误", "无HRP", 2) return end
+    task.spawn(function()
+        local animId = hum.RigType == Enum.HumanoidRigType.R6 and "rbxassetid://27432686" or "rbxassetid://507776043"
+        local anim = Instance.new("Animation") anim.AnimationId = animId
+        local track = hum:LoadAnimation(anim) track:Play() track:AdjustSpeed(0)
+        local animate = c:FindFirstChild("Animate") if animate then animate.Disabled = true end
+        local oldSpin = hrp:FindFirstChild("TXH_Spin") if oldSpin then oldSpin:Destroy() end
+        local spin = Instance.new("BodyAngularVelocity")
+        spin.Name = "TXH_Spin" spin.Parent = hrp
+        spin.MaxTorque = Vector3.new(0, math.huge, 0)
+        spin.AngularVelocity = Vector3.new(0, spinSpeed, 0)
+        Notify("旋转", "速度 " .. spinSpeed .. " 已开启", 2)
+    end)
+end
+local function StopSpin()
+    local c = LocalPlayer.Character
+    if c then
+        local hrp = c:FindFirstChild("HumanoidRootPart")
+        if hrp then local sp = hrp:FindFirstChild("TXH_Spin") if sp then sp:Destroy() end end
+        local hum = c:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local animate = c:FindFirstChild("Animate") if animate then animate.Disabled = false end
+            for _, t in pairs(hum:GetPlayingAnimationTracks()) do
+                if t.Animation and (t.Animation.AnimationId:find("27432686") or t.Animation.AnimationId:find("507776043")) then t:Stop() end
+            end
+        end
+    end
+    Notify("旋转", "已停止", 2)
+end
+
+-- ============================================================
+-- 防甩飞
+-- ============================================================
+local antiFlingConn, antiFlingCharConn, antiFlingVelConn = nil, nil, nil
+local origFallenHeight = workspace.FallenPartsDestroyHeight
+local function EnableAntiFling()
+    origFallenHeight = workspace.FallenPartsDestroyHeight
+    if antiFlingConn then antiFlingConn:Disconnect() end
+    if antiFlingCharConn then antiFlingCharConn:Disconnect() end
+    if antiFlingVelConn then antiFlingVelConn:Disconnect() end
+    local function protectChar(char)
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart") if not hrp then return end
+        if antiFlingVelConn then antiFlingVelConn:Disconnect() end
+        antiFlingVelConn = hrp:GetPropertyChangedSignal("Velocity"):Connect(function()
+            pcall(function() if hrp.Velocity.Magnitude > 300 then hrp.Velocity = Vector3.new(0,0,0) hrp.RotVelocity = Vector3.new(0,0,0) end end)
+        end)
+    end
+    protectChar(LocalPlayer.Character)
+    antiFlingCharConn = LocalPlayer.CharacterAdded:Connect(function(c) task.wait(0.5) protectChar(c) end)
+    antiFlingConn = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            local c = LocalPlayer.Character if not c then return end
+            local hrp = c:FindFirstChild("HumanoidRootPart") if not hrp then return end
+            local hum = c:FindFirstChildOfClass("Humanoid")
+            if hum then
+                local st = hum:GetState()
+                if st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.Ragdoll then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+            end
+            if hrp.Velocity.Magnitude > 500 then hrp.Velocity = Vector3.new(0,0,0) hrp.RotVelocity = Vector3.new(0,0,0) end
+            for _, child in ipairs(hrp:GetChildren()) do
+                if child:IsA("BodyVelocity") or child:IsA("BodyAngularVelocity") or child:IsA("BodyThrust") then
+                    if child.Name ~= "TXHVel" then child:Destroy() end
+                end
+            end
+        end)
+    end)
+end
+local function DisableAntiFling()
+    if antiFlingConn then antiFlingConn:Disconnect() antiFlingConn = nil end
+    if antiFlingCharConn then antiFlingCharConn:Disconnect() antiFlingCharConn = nil end
+    if antiFlingVelConn then antiFlingVelConn:Disconnect() antiFlingVelConn = nil end
+    workspace.FallenPartsDestroyHeight = origFallenHeight
+    local c = LocalPlayer.Character
+    if c then for _, p in ipairs(c:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide = true end end end
+end
+
+-- ============================================================
+-- 拉到身边
+-- ============================================================
+local function PullPlayerToSelf(target)
+    if not target then return end
+    local tChar = target.Character
+    local c = LocalPlayer.Character
+    if tChar and c then tChar:PivotTo(c:GetPivot()) Notify("拉取", "已拉到身边", 2) end
+end
+
+-- ============================================================
+-- 自动发言
+-- ============================================================
+local function SendChatMessage(msg)
+    local TCS = game:GetService("TextChatService")
+    local RS2 = game:GetService("ReplicatedStorage")
+    if TCS.ChatVersion == Enum.ChatVersion.TextChatService then
+        TCS.TextChannels.RBXGeneral:SendAsync(msg)
+    else
+        RS2.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, "All")
+    end
+end
+
+-- ============================================================
+-- 互动模块
+-- ============================================================
+local function FirePrompt(prompt)
+    if not prompt or not prompt.Parent then return end
+    if type(fireproximityprompt) == "function" then
+        pcall(fireproximityprompt, prompt)
+    else
+        pcall(function() prompt:InputHoldBegin() end)
+        task.wait(prompt.HoldDuration or 0)
+        pcall(function() prompt:InputHoldEnd() end)
+    end
+end
+local function EnableQuickInteract()
+    if quickInteractConn then return end
+    quickInteractConn = game:GetService("ProximityPromptService").PromptButtonHoldBegan:Connect(function(prompt)
+        if not prompt then return end
+        if quickInteractOrigin[prompt] == nil then quickInteractOrigin[prompt] = prompt.HoldDuration end
+        pcall(function() prompt.HoldDuration = 0 end)
+    end)
+end
+local function DisableQuickInteract()
+    if quickInteractConn then quickInteractConn:Disconnect() quickInteractConn = nil end
+    for prompt, orig in pairs(quickInteractOrigin) do
+        if prompt and prompt.Parent then pcall(function() prompt.HoldDuration = orig end) end
+    end
+    quickInteractOrigin = {}
+end
+local function EnableAutoInteract()
+    if autoInteract then return end
+    autoInteract = true
+    task.spawn(function()
+        while autoInteract do
+            for _, descendant in ipairs(workspace:GetDescendants()) do
+                if not autoInteract then break end
+                if descendant:IsA("ProximityPrompt") then FirePrompt(descendant) end
+            end
+            task.wait(0.25)
+        end
+    end)
+end
+local function DisableAutoInteract() autoInteract = false end
+local function ApplyInteractRange(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+    if interactRangeOrigin[prompt] == nil then interactRangeOrigin[prompt] = prompt.MaxActivationDistance end
+    pcall(function() prompt.MaxActivationDistance = interactRangeValue end)
+end
+local function EnableInteractRange()
+    if interactRangeConn then return end
+    interactRangeEnabled = true
+    for _, d in ipairs(workspace:GetDescendants()) do if d:IsA("ProximityPrompt") then ApplyInteractRange(d) end end
+    interactRangeConn = workspace.DescendantAdded:Connect(function(d)
+        if not interactRangeEnabled then return end
+        if d:IsA("ProximityPrompt") then task.defer(function() ApplyInteractRange(d) end) end
+    end)
+end
+local function DisableInteractRange()
+    interactRangeEnabled = false
+    if interactRangeConn then interactRangeConn:Disconnect() interactRangeConn = nil end
+    for prompt, orig in pairs(interactRangeOrigin) do
+        if prompt and prompt.Parent then pcall(function() prompt.MaxActivationDistance = orig end) end
+    end
+    interactRangeOrigin = {}
+end
+-- ============================================================
+-- 滤镜
+-- ============================================================
+local function clearPost()
+    for _, v in ipairs(Lighting:GetDescendants()) do
+        if v:IsA("PostEffect") and v.Name:sub(1, 4) == "TXH_" then v:Destroy() end
+    end
+end
+local function ApplyFilterMovie()
+    clearPost()
+    local cc = Instance.new("ColorCorrectionEffect") cc.Name = "TXH_CC"
+    cc.Saturation = 0.1 cc.Contrast = 0.2 cc.Brightness = -0.05 cc.Parent = Lighting
+    Lighting.FogColor = Color3.fromRGB(80, 80, 90) Lighting.FogEnd = 600
+    Notify("滤镜", "电影感", 2)
+end
+local function ApplyFilterVivid()
+    clearPost()
+    local cc = Instance.new("ColorCorrectionEffect") cc.Name = "TXH_CC"
+    cc.Saturation = 0.5 cc.Contrast = 0.15 cc.Brightness = 0.05 cc.Parent = Lighting
+    Notify("滤镜", "鲜艳", 2)
+end
+local function ApplyFilterDark()
+    clearPost()
+    local cc = Instance.new("ColorCorrectionEffect") cc.Name = "TXH_CC"
+    cc.Saturation = -0.3 cc.Contrast = 0.4 cc.Brightness = -0.2 cc.Parent = Lighting
+    Lighting.Ambient = Color3.new(0.1, 0.1, 0.1)
+    Notify("滤镜", "暗黑", 2)
+end
+local function ApplyFilterRetro()
+    clearPost()
+    local cc = Instance.new("ColorCorrectionEffect") cc.Name = "TXH_CC"
+    cc.Saturation = -0.2 cc.TintColor = Color3.fromRGB(255, 220, 180) cc.Contrast = 0.1 cc.Parent = Lighting
+    Notify("滤镜", "复古", 2)
+end
+local function ApplyFilterNeon()
+    clearPost()
+    local b = Instance.new("BloomEffect") b.Name = "TXH_Bloom" b.Intensity = 2 b.Size = 30 b.Threshold = 0.6 b.Parent = Lighting
+    local cc = Instance.new("ColorCorrectionEffect") cc.Name = "TXH_CC" cc.Saturation = 0.4 cc.Parent = Lighting
+    Notify("滤镜", "霓虹", 2)
+end
+local function RestoreFilter()
+    clearPost()
+    Lighting.Ambient = Color3.fromRGB(0, 0, 0)
+    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.Brightness = 1
+    Lighting.ExposureCompensation = 0
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 1000
+    Lighting.FogColor = Color3.fromRGB(192, 192, 192)
+    Notify("滤镜", "已恢复原状", 2)
+end
+
+-- ============================================================
+-- 夜视 / 去雾 / 去阴影
+-- ============================================================
+local function ToggleNightVision(state)
+    NightVisionEnabled = state
+    if state then Lighting.Ambient = Color3.new(1, 1, 1) else Lighting.Ambient = Color3.new(0, 0, 0) end
+end
+local fogOrigStart = Lighting.FogStart
+local fogOrigEnd = Lighting.FogEnd
+local function ToggleFog(state)
+    FogEnabled = state
+    if state then
+        fogOrigStart = Lighting.FogStart fogOrigEnd = Lighting.FogEnd
+        Lighting.FogStart = 0 Lighting.FogEnd = 1e20
+        Notify("去雾", "已开启", 2)
+    else
+        Lighting.FogStart = fogOrigStart Lighting.FogEnd = fogOrigEnd
+        Notify("去雾", "已关闭", 2)
+    end
+end
+local function noShadowApply(part)
+    if part:IsA("BasePart") and part.CastShadow then
+        if shadowOriginals[part] == nil then shadowOriginals[part] = true end
+        pcall(function() part.CastShadow = false end)
+    end
+end
+local function EnableNoShadow()
+    origGlobalShadows = Lighting.GlobalShadows
+    pcall(function() Lighting.GlobalShadows = false end)
+    for _, d in ipairs(workspace:GetDescendants()) do if d:IsA("BasePart") then noShadowApply(d) end end
+    noShadowConn = workspace.DescendantAdded:Connect(function(d) if d:IsA("BasePart") then noShadowApply(d) end end)
+    Notify("去阴影", "已开启", 2)
+end
+local function DisableNoShadow()
+    pcall(function() Lighting.GlobalShadows = origGlobalShadows end)
+    if noShadowConn then noShadowConn:Disconnect() noShadowConn = nil end
+    for part, _ in pairs(shadowOriginals) do pcall(function() if part and part.Parent then part.CastShadow = true end end) end
+    shadowOriginals = {}
+    Notify("去阴影", "已关闭", 2)
+end
+
+-- ============================================================
+-- 时间 / FPS
+-- ============================================================
+local function updateTime()
+    local t = os.date("*t")
+    local s = string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
+    if timeGui then
+        local lbl = timeGui:FindFirstChild("TimeLabel")
+        if lbl then lbl.Text = "🕐 " .. s end
+    end
+end
+local function EnableTimeDisplay()
+    timeGui = Instance.new("ScreenGui") timeGui.Name = "TXH_Time" timeGui.ResetOnSpawn = false
+    pcall(function() timeGui.Parent = CoreGui end)
+    if not timeGui.Parent then timeGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local lbl = Instance.new("TextLabel") lbl.Name = "TimeLabel" lbl.Parent = timeGui
+    lbl.BackgroundTransparency = 1 lbl.Position = UDim2.new(0, 10, 0, 10) lbl.Size = UDim2.new(0, 150, 0, 30)
+    lbl.Font = Enum.Font.GothamBold lbl.TextSize = 16 lbl.TextColor3 = Color3.new(1, 1, 1)
+    lbl.TextStrokeTransparency = 0 lbl.TextXAlignment = Enum.TextXAlignment.Left lbl.Text = "🕐 --:--:--"
+    updateTime()
+    timeConn = RunService.Heartbeat:Connect(updateTime)
+    Notify("显示时间", "已开启", 2)
+end
+local function DisableTimeDisplay()
+    if timeConn then timeConn:Disconnect() timeConn = nil end
+    if timeGui then timeGui:Destroy() timeGui = nil end
+    Notify("显示时间", "已关闭", 2)
+end
+local function EnableFPS()
+    local g = Instance.new("ScreenGui") g.Name = "TXH_FPS" g.ResetOnSpawn = false
+    pcall(function() g.Parent = CoreGui end)
+    if not g.Parent then g.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local l = Instance.new("TextLabel") l.Parent = g
+    l.BackgroundTransparency = 1 l.Position = UDim2.new(.78, 0, 0, 0) l.Size = UDim2.new(0, 130, 0, 30)
+    l.Font = Enum.Font.GothamBold l.TextSize = 14 l.TextColor3 = Color3.new(1, 1, 1)
+    l.TextStrokeTransparency = 0 l.Text = "FPS: 0"
+    local n = 0
+    fpsConn = RunService.RenderStepped:Connect(function(dt)
+        n = n + 1
+        if n >= 10 then l.Text = "FPS: " .. math.floor(1 / dt) n = 0 end
+    end)
+end
+local function DisableFPS()
+    if fpsConn then fpsConn:Disconnect() fpsConn = nil end
+    local g = CoreGui:FindFirstChild("TXH_FPS") if g then g:Destroy() end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then local g3 = pg:FindFirstChild("TXH_FPS") if g3 then g3:Destroy() end end
+end
+
+-- ============================================================
+-- 动画包
+-- ============================================================
+local function LoadTrack(hum, anim)
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if animator then return animator:LoadAnimation(anim) end
+    return hum:LoadAnimation(anim)
+end
+local function SetAnimations(animData, packName)
+    local c = LocalPlayer.Character
+    if not c then Notify("错误", "角色未加载", 3) return end
+    local Animate = c:FindFirstChild("Animate")
+    local hum = c:FindFirstChildOfClass("Humanoid")
+    if not (Animate and hum) then Notify("错误", "缺少 Animate/Humanoid", 3) return end
+    Animate.Disabled = true
+    for _, track in pairs(hum:GetPlayingAnimationTracks()) do pcall(function() track:Stop() end) end
+    pcall(function() Animate.idle.Animation1.AnimationId = animData.idle1 end)
+    pcall(function() Animate.idle.Animation2.AnimationId = animData.idle2 end)
+    pcall(function() Animate.walk.WalkAnim.AnimationId = animData.walk end)
+    pcall(function() Animate.run.RunAnim.AnimationId = animData.run end)
+    pcall(function() Animate.jump.JumpAnim.AnimationId = animData.jump end)
+    pcall(function() Animate.climb.ClimbAnim.AnimationId = animData.climb end)
+    pcall(function() Animate.fall.FallAnim.AnimationId = animData.fall end)
+    pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+    Animate.Disabled = false
+    Notify("动画", (packName or "动画") .. " 已应用", 3)
+end
+local AnimationPacks = {
+    {name="吸血鬼", data={idle1="http://www.roblox.com/asset/?id=1083445855",idle2="http://www.roblox.com/asset/?id=1083450166",walk="http://www.roblox.com/asset/?id=1083473930",run="http://www.roblox.com/asset/?id=1083462077",jump="http://www.roblox.com/asset/?id=1083455352",climb="http://www.roblox.com/asset/?id=1083439238",fall="http://www.roblox.com/asset/?id=1083443587"}},
+    {name="英雄", data={idle1="http://www.roblox.com/asset/?id=616111295",idle2="http://www.roblox.com/asset/?id=616113536",walk="http://www.roblox.com/asset/?id=616122287",run="http://www.roblox.com/asset/?id=616117076",jump="http://www.roblox.com/asset/?id=616115533",climb="http://www.roblox.com/asset/?id=616104706",fall="http://www.roblox.com/asset/?id=616108001"}},
+    {name="经典僵尸", data={idle1="http://www.roblox.com/asset/?id=616158929",idle2="http://www.roblox.com/asset/?id=616160636",walk="http://www.roblox.com/asset/?id=616168032",run="http://www.roblox.com/asset/?id=616163682",jump="http://www.roblox.com/asset/?id=616161997",climb="http://www.roblox.com/asset/?id=616156119",fall="http://www.roblox.com/asset/?id=616157476"}},
+    {name="法师", data={idle1="http://www.roblox.com/asset/?id=707742142",idle2="http://www.roblox.com/asset/?id=707855907",walk="http://www.roblox.com/asset/?id=707897309",run="http://www.roblox.com/asset/?id=707861613",jump="http://www.roblox.com/asset/?id=707853694",climb="http://www.roblox.com/asset/?id=707826056",fall="http://www.roblox.com/asset/?id=707829716"}},
+    {name="幽灵", data={idle1="http://www.roblox.com/asset/?id=616006778",idle2="http://www.roblox.com/asset/?id=616008087",walk="http://www.roblox.com/asset/?id=616010382",run="http://www.roblox.com/asset/?id=616013216",jump="http://www.roblox.com/asset/?id=616008936",climb="http://www.roblox.com/asset/?id=616003713",fall="http://www.roblox.com/asset/?id=616005863"}},
+    {name="长者", data={idle1="http://www.roblox.com/asset/?id=845397899",idle2="http://www.roblox.com/asset/?id=845400520",walk="http://www.roblox.com/asset/?id=845403856",run="http://www.roblox.com/asset/?id=845386501",jump="http://www.roblox.com/asset/?id=845398858",climb="http://www.roblox.com/asset/?id=845392038",fall="http://www.roblox.com/asset/?id=845396048"}},
+    {name="悬浮", data={idle1="http://www.roblox.com/asset/?id=616006778",idle2="http://www.roblox.com/asset/?id=616008087",walk="http://www.roblox.com/asset/?id=616013216",run="http://www.roblox.com/asset/?id=616010382",jump="http://www.roblox.com/asset/?id=616008936",climb="http://www.roblox.com/asset/?id=616003713",fall="http://www.roblox.com/asset/?id=616005863"}},
+    {name="宇航员", data={idle1="http://www.roblox.com/asset/?id=891621366",idle2="http://www.roblox.com/asset/?id=891633237",walk="http://www.roblox.com/asset/?id=891667138",run="http://www.roblox.com/asset/?id=891636393",jump="http://www.roblox.com/asset/?id=891627522",climb="http://www.roblox.com/asset/?id=891609353",fall="http://www.roblox.com/asset/?id=891617961"}},
+    {name="忍者", data={idle1="http://www.roblox.com/asset/?id=656117400",idle2="http://www.roblox.com/asset/?id=656118341",walk="http://www.roblox.com/asset/?id=656121766",run="http://www.roblox.com/asset/?id=656118852",jump="http://www.roblox.com/asset/?id=656117878",climb="http://www.roblox.com/asset/?id=656114359",fall="http://www.roblox.com/asset/?id=656115606"}},
+    {name="狼人", data={idle1="http://www.roblox.com/asset/?id=1083195517",idle2="http://www.roblox.com/asset/?id=1083214717",walk="http://www.roblox.com/asset/?id=1083178339",run="http://www.roblox.com/asset/?id=1083216690",jump="http://www.roblox.com/asset/?id=1083218792",climb="http://www.roblox.com/asset/?id=1083182000",fall="http://www.roblox.com/asset/?id=1083189019"}},
+    {name="卡通", data={idle1="http://www.roblox.com/asset/?id=742637544",idle2="http://www.roblox.com/asset/?id=742638445",walk="http://www.roblox.com/asset/?id=742640026",run="http://www.roblox.com/asset/?id=742638842",jump="http://www.roblox.com/asset/?id=742637942",climb="http://www.roblox.com/asset/?id=742636889",fall="http://www.roblox.com/asset/?id=742637151"}},
+    {name="海盗", data={idle1="http://www.roblox.com/asset/?id=750781874",idle2="http://www.roblox.com/asset/?id=750782770",walk="http://www.roblox.com/asset/?id=750785693",run="http://www.roblox.com/asset/?id=750783738",jump="http://www.roblox.com/asset/?id=750782230",climb="http://www.roblox.com/asset/?id=750779899",fall="http://www.roblox.com/asset/?id=750780242"}},
+    {name="潜行", data={idle1="http://www.roblox.com/asset/?id=1132473842",idle2="http://www.roblox.com/asset/?id=1132477671",walk="http://www.roblox.com/asset/?id=1132510133",run="http://www.roblox.com/asset/?id=1132494274",jump="http://www.roblox.com/asset/?id=1132489853",climb="http://www.roblox.com/asset/?id=1132461372",fall="http://www.roblox.com/asset/?id=1132469004"}},
+    {name="玩具", data={idle1="http://www.roblox.com/asset/?id=782841498",idle2="http://www.roblox.com/asset/?id=782845736",walk="http://www.roblox.com/asset/?id=782843345",run="http://www.roblox.com/asset/?id=782842708",jump="http://www.roblox.com/asset/?id=782847020",climb="http://www.roblox.com/asset/?id=782843869",fall="http://www.roblox.com/asset/?id=782846423"}},
+    {name="骑士", data={idle1="http://www.roblox.com/asset/?id=657595757",idle2="http://www.roblox.com/asset/?id=657568135",walk="http://www.roblox.com/asset/?id=657552124",run="http://www.roblox.com/asset/?id=657564596",jump="http://www.roblox.com/asset/?id=658409194",climb="http://www.roblox.com/asset/?id=658360781",fall="http://www.roblox.com/asset/?id=657600338"}},
+    {name="自信", data={idle1="http://www.roblox.com/asset/?id=1069977950",idle2="http://www.roblox.com/asset/?id=1069987858",walk="http://www.roblox.com/asset/?id=1070017263",run="http://www.roblox.com/asset/?id=1070001516",jump="http://www.roblox.com/asset/?id=1069984524",climb="http://www.roblox.com/asset/?id=1069946257",fall="http://www.roblox.com/asset/?id=1069973677"}},
+    {name="流行明星", data={idle1="http://www.roblox.com/asset/?id=1212900985",idle2="http://www.roblox.com/asset/?id=1212900985",walk="http://www.roblox.com/asset/?id=1212980338",run="http://www.roblox.com/asset/?id=1212980348",jump="http://www.roblox.com/asset/?id=1212954642",climb="http://www.roblox.com/asset/?id=1213044953",fall="http://www.roblox.com/asset/?id=1212900995"}},
+    {name="公主", data={idle1="http://www.roblox.com/asset/?id=941003647",idle2="http://www.roblox.com/asset/?id=941013098",walk="http://www.roblox.com/asset/?id=941028902",run="http://www.roblox.com/asset/?id=941015281",jump="http://www.roblox.com/asset/?id=941008832",climb="http://www.roblox.com/asset/?id=940996062",fall="http://www.roblox.com/asset/?id=941000007"}},
+    {name="牛仔", data={idle1="http://www.roblox.com/asset/?id=1014390418",idle2="http://www.roblox.com/asset/?id=1014398616",walk="http://www.roblox.com/asset/?id=1014421541",run="http://www.roblox.com/asset/?id=1014401683",jump="http://www.roblox.com/asset/?id=1014394726",climb="http://www.roblox.com/asset/?id=1014380606",fall="http://www.roblox.com/asset/?id=1014384571"}},
+    {name="巡逻", data={idle1="http://www.roblox.com/asset/?id=1149612882",idle2="http://www.roblox.com/asset/?id=1150842221",walk="http://www.roblox.com/asset/?id=1151231493",run="http://www.roblox.com/asset/?id=1150967949",jump="http://www.roblox.com/asset/?id=1150944216",climb="http://www.roblox.com/asset/?id=1148811837",fall="http://www.roblox.com/asset/?id=1148863382"}},
+}
+
+-- ============================================================
 -- 加载界面
 -- ============================================================
 -- ============================================================
